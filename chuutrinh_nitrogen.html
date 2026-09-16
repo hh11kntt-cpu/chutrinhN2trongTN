@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mô phỏng chu trình Nitrogen</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f8fafc;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            background-color: #e2e8f0;
+        }
+        canvas {
+            display: block;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
+        }
+        .controls-panel {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            z-index: 10;
+        }
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            max-width: 1000px;
+        }
+        button {
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        #info-box {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            border-radius: 8px;
+            width: 320px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="w-full text-center py-3 bg-white shadow-md z-20 relative">
+        <h1 class="text-2xl font-bold text-gray-800">Mô phỏng Chu trình Nitrogen (N₂) trong Tự nhiên</h1>
+        <p class="text-md text-blue-600 font-semibold mt-1">Thiết kế: Giáo viên Nguyễn Mạnh Hưng - Trường THPT Trại Cau</p>
+    </div>
+
+    <div id="canvas-container">
+        <!-- Text box hiển thị thông tin -->
+        <div id="info-box">
+            <h3 class="font-bold text-gray-800 mb-1" id="info-title">Chu trình Nitrogen</h3>
+            <p class="text-sm text-gray-600 leading-relaxed" id="info-desc">
+                Nhấn vào các nút bên dưới để xem sự di chuyển và biến đổi của các hợp chất chứa Nitrogen trong hệ sinh thái.
+            </p>
+        </div>
+        
+        <!-- Controls -->
+        <div class="controls-panel">
+            <div class="btn-group">
+                <button onclick="triggerLightning()" class="bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold py-2 px-4 rounded-lg flex items-center gap-1">
+                    ⚡ Sấm sét (Cố định lý hóa)
+                </button>
+                <button onclick="triggerFixation()" class="bg-blue-500 hover:bg-blue-400 text-white font-bold py-2 px-4 rounded-lg">
+                    🦠 VK Cố định đạm (Nốt sần)
+                </button>
+                <button onclick="triggerAmmonification()" class="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded-lg">
+                    🐄 Động vật bài tiết/Chết (Amôn hóa)
+                </button>
+                <button onclick="triggerNitrification()" class="bg-orange-500 hover:bg-orange-400 text-white font-bold py-2 px-4 rounded-lg">
+                    🧫 Nitrat hóa (NH₄⁺ → NO₃⁻)
+                </button>
+                <button onclick="triggerAssimilation()" class="bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-2 px-4 rounded-lg">
+                    🌱 Đồng hóa (Thực vật hấp thụ)
+                </button>
+                <button onclick="triggerDenitrification()" class="bg-purple-500 hover:bg-purple-400 text-white font-bold py-2 px-4 rounded-lg">
+                    ☁️ Phản Nitrat hóa (Trở về bầu trời)
+                </button>
+                <button onclick="toggleAutoRun()" id="autoBtn" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg border-2 border-gray-900 ml-4">
+                    ▶️ Chạy Tự Động
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Cấu hình màu sắc
+        const COLORS = {
+            N2: '#3498db',    // Xanh lam
+            NH4: '#f1c40f',   // Vàng
+            NO3: '#e74c3c',   // Đỏ
+            ORG: '#2ecc71',   // Xanh lá (Hữu cơ)
+            SOIL: '#8B4513',
+            SKY: '#87CEEB'
+        };
+
+        let particles = [];
+        let zones = {};
+        let lightningAlpha = 0;
+        let lightningPath = [];
+        let autoRun = false;
+        let autoTimer = 0;
+
+        function setup() {
+            let canvas = createCanvas(windowWidth, windowHeight - 140);
+            canvas.parent('canvas-container');
+            
+            defineZones();
+            initParticles();
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight - 140);
+            defineZones();
+        }
+
+        function defineZones() {
+            // Định nghĩa các vùng không gian để hạt di chuyển
+            zones = {
+                sky: { xMin: 50, xMax: width - 50, yMin: 20, yMax: height * 0.35 },
+                plant: { xMin: width * 0.15, xMax: width * 0.25, yMin: height * 0.2, yMax: height * 0.4 },
+                roots: { xMin: width * 0.15, xMax: width * 0.25, yMin: height * 0.55, yMax: height * 0.7 },
+                animal: { xMin: width * 0.7, xMax: width * 0.85, yMin: height * 0.35, yMax: height * 0.45 },
+                soilSurface: { xMin: 50, xMax: width - 50, yMin: height * 0.5, yMax: height * 0.6 },
+                soilMid: { xMin: 50, xMax: width - 50, yMin: height * 0.6, yMax: height * 0.8 },
+                soilDeep: { xMin: width * 0.6, xMax: width * 0.9, yMin: height * 0.75, yMax: height * 0.95 }
+            };
+        }
+
+        function initParticles() {
+            particles = [];
+            // Bầu trời (N2)
+            for(let i=0; i<25; i++) particles.push(new Particle('N2', zones.sky));
+            // Đất (NH4+, NO3-)
+            for(let i=0; i<15; i++) particles.push(new Particle('NH4+', zones.soilMid));
+            for(let i=0; i<15; i++) particles.push(new Particle('NO3-', zones.soilMid));
+            // Hữu cơ trong cây
+            for(let i=0; i<8; i++) particles.push(new Particle('Org N', zones.plant));
+            // Hữu cơ trong động vật
+            for(let i=0; i<6; i++) particles.push(new Particle('Org N', zones.animal));
+        }
+
+        function updateInfo(title, desc) {
+            document.getElementById('info-title').innerText = title;
+            document.getElementById('info-desc').innerText = desc;
+        }
+
+        class Particle {
+            constructor(type, initialZone) {
+                this.type = type;
+                this.zone = initialZone;
+                this.x = random(this.zone.xMin, this.zone.xMax);
+                this.y = random(this.zone.yMin, this.zone.yMax);
+                this.vx = random(-0.5, 0.5);
+                this.vy = random(-0.5, 0.5);
+                this.radius = 16;
+                this.targetX = null;
+                this.targetY = null;
+                this.moving = false;
+                this.speed = 2;
+                this.onReachTarget = null;
+            }
+
+            setTarget(zone, newType, speedMult = 1, callback = null) {
+                this.zone = zone;
+                this.targetX = random(zone.xMin, zone.xMax);
+                this.targetY = random(zone.yMin, zone.yMax);
+                this.moving = true;
+                this.speed = 2 * speedMult;
+                this.nextType = newType;
+                this.onReachTarget = callback;
+            }
+
+            update() {
+                if (this.moving) {
+                    // Di chuyển tới đích
+                    let dx = this.targetX - this.x;
+                    let dy = this.targetY - this.y;
+                    let dist = sqrt(dx*dx + dy*dy);
+                    
+                    if (dist < 5) {
+                        this.moving = false;
+                        if (this.nextType) this.type = this.nextType;
+                        if (this.onReachTarget) this.onReachTarget(this);
+                    } else {
+                        this.x += (dx / dist) * this.speed;
+                        this.y += (dy / dist) * this.speed;
+                    }
+                } else {
+                    // Chuyển động lơ lửng trong zone
+                    this.vx += random(-0.1, 0.1);
+                    this.vy += random(-0.1, 0.1);
+                    this.vx = constrain(this.vx, -0.8, 0.8);
+                    this.vy = constrain(this.vy, -0.8, 0.8);
+                    
+                    this.x += this.vx;
+                    this.y += this.vy;
+
+                    // Giữ trong ranh giới zone
+                    if (this.x < this.zone.xMin) { this.x = this.zone.xMin; this.vx *= -1; }
+                    if (this.x > this.zone.xMax) { this.x = this.zone.xMax; this.vx *= -1; }
+                    if (this.y < this.zone.yMin) { this.y = this.zone.yMin; this.vy *= -1; }
+                    if (this.y > this.zone.yMax) { this.y = this.zone.yMax; this.vy *= -1; }
+                }
+            }
+
+            draw() {
+                push();
+                translate(this.x, this.y);
+                
+                // Bóng
+                noStroke();
+                fill(0, 30);
+                ellipse(2, 2, this.radius*2, this.radius*2);
+
+                // Màu hạt
+                let col;
+                if (this.type === 'N2') col = COLORS.N2;
+                else if (this.type === 'NH4+') col = COLORS.NH4;
+                else if (this.type === 'NO3-') col = COLORS.NO3;
+                else col = COLORS.ORG; // Org N
+                
+                // Gradient cầu
+                let grad = drawingContext.createRadialGradient(-3, -3, 0, 0, 0, this.radius);
+                grad.addColorStop(0, '#ffffff88');
+                grad.addColorStop(1, col);
+                drawingContext.fillStyle = grad;
+                
+                stroke(0, 50);
+                strokeWeight(1);
+                ellipse(0, 0, this.radius * 2);
+
+                // Text
+                fill(this.type === 'NH4+' ? 0 : 255);
+                noStroke();
+                textAlign(CENTER, CENTER);
+                textSize(10);
+                textStyle(BOLD);
+                text(this.type, 0, 0);
+                
+                pop();
+            }
+        }
+
+        function triggerLightning() {
+            updateInfo("Cố định Nitrogen bằng Tia lửa điện", "Năng lượng từ sấm sét phá vỡ liên kết 3 bền vững của N₂ trong không khí, kết hợp với O₂ và hơi nước tạo thành ion Nitrate (NO₃⁻) rơi xuống đất theo mưa.");
+            
+            // Hiệu ứng chớp sáng
+            lightningAlpha = 255;
+            lightningPath = [{x: random(width*0.3, width*0.7), y: 0}];
+            for(let y = 0; y < height*0.5; y += 40) {
+                lightningPath.push({x: lightningPath[lightningPath.length-1].x + random(-50, 50), y: y});
+            }
+
+            // Tìm 3 hạt N2 chuyển thành NO3- rơi xuống đất
+            let n2Particles = particles.filter(p => p.type === 'N2' && !p.moving).slice(0, 3);
+            n2Particles.forEach(p => {
+                p.setTarget(zones.soilSurface, 'NO3-', 3); // Tốc độ rơi nhanh
+            });
+            checkReplenishN2();
+        }
+
+        function triggerFixation() {
+            updateInfo("Cố định sinh học (Vi khuẩn nốt sần)", "Các vi khuẩn cộng sinh trong rễ cây họ đậu (như Rhizobium) có enzyme nitrogenase giúp chuyển hóa trực tiếp N₂ tự do thành NH₄⁺ cung cấp cho cây.");
+            
+            let n2Particles = particles.filter(p => p.type === 'N2' && !p.moving).slice(0, 4);
+            n2Particles.forEach(p => {
+                p.setTarget(zones.roots, 'NH4+', 1.5, (particle) => {
+                    // Sau khi vào rễ, từ từ hòa vào đất xung quanh
+                    setTimeout(() => { if(particle) particle.setTarget(zones.soilMid, 'NH4+', 0.5); }, 2000);
+                });
+            });
+            checkReplenishN2();
+        }
+
+        function triggerAmmonification() {
+            updateInfo("Quá trình Amôn hóa (Phân giải)", "Chất thải của động vật hoặc xác động thực vật chết đi sẽ bị nấm và vi khuẩn phân giải, biến các hợp chất Nitrogen hữu cơ (Protein, DNA) thành ion Ammonium (NH₄⁺).");
+            
+            // Lấy Org N từ động vật hoặc thực vật chuyển xuống đất thành NH4+
+            let orgParticles = particles.filter(p => p.type === 'Org N' && !p.moving).slice(0, 4);
+            orgParticles.forEach(p => {
+                p.setTarget(zones.soilSurface, 'NH4+', 1.5, (particle) => {
+                    particle.setTarget(zones.soilMid, 'NH4+', 0.5); // Ngấm xuống đất sâu hơn
+                });
+            });
+            
+            // Bổ sung Org N để không bao giờ hết
+            if (particles.filter(p => p.type === 'Org N' && p.zone === zones.animal).length < 2) {
+                 for(let i=0; i<4; i++) particles.push(new Particle('Org N', zones.animal));
+            }
+        }
+
+        function triggerNitrification() {
+            updateInfo("Quá trình Nitrat hóa", "Vi khuẩn trong đất (Nitrosomonas và Nitrobacter) oxy hóa NH₄⁺ thành Nitrite (NO₂⁻) rồi tiếp tục thành Nitrate (NO₃⁻). Đây là dạng cây dễ hấp thụ nhất.");
+            
+            let nh4Particles = particles.filter(p => p.type === 'NH4+' && !p.moving).slice(0, 5);
+            nh4Particles.forEach(p => {
+                p.setTarget(zones.soilMid, 'NO3-', 1.0); // Chuyển hóa tại chỗ trong đất
+            });
+        }
+
+        function triggerAssimilation() {
+            updateInfo("Quá trình Đồng hóa", "Thực vật hấp thụ NH₄⁺ và NO₃⁻ từ đất qua rễ để tổng hợp nên các axit amin, protein (Nitrogen hữu cơ). Động vật sau đó ăn thực vật để lấy Nitrogen.");
+            
+            let soilIons = particles.filter(p => (p.type === 'NO3-' || p.type === 'NH4+') && !p.moving).slice(0, 5);
+            soilIons.forEach(p => {
+                // Hút lên cây thành Org N
+                p.setTarget(zones.plant, 'Org N', 2.0);
+            });
+
+            // Mô phỏng bò ăn cỏ: Chuyển 1-2 Org N từ cây sang bò
+            setTimeout(() => {
+                let plantOrg = particles.filter(p => p.type === 'Org N' && p.zone === zones.plant && !p.moving).slice(0, 2);
+                plantOrg.forEach(p => p.setTarget(zones.animal, 'Org N', 1.5));
+            }, 1000);
+        }
+
+        function triggerDenitrification() {
+            updateInfo("Phản Nitrat hóa", "Trong điều kiện thiếu oxy (đất ngập nước), các vi khuẩn kỵ khí sẽ khử NO₃⁻ ngược trở lại thành khí N₂ bay về khí quyển, khép kín chu trình.");
+            
+            // Tìm NO3- sâu trong đất
+            let no3Particles = particles.filter(p => p.type === 'NO3-' && !p.moving).slice(0, 4);
+            no3Particles.forEach(p => {
+                // Kéo xuống vùng kị khí sâu hơn 1 chút trước khi bay lên
+                p.setTarget(zones.soilDeep, 'NO3-', 1, (particle) => {
+                    setTimeout(() => {
+                        particle.setTarget(zones.sky, 'N2', 2.0); // Bay lên trời
+                    }, 500);
+                });
+            });
+        }
+
+        function checkReplenishN2() {
+            // Đảm bảo bầu trời không bao giờ hết N2 để mô phỏng không bị gián đoạn
+            let skyN2 = particles.filter(p => p.type === 'N2').length;
+            if (skyN2 < 10) {
+                for(let i=0; i<10; i++) particles.push(new Particle('N2', zones.sky));
+            }
+        }
+
+        // Auto Run Logic
+        function toggleAutoRun() {
+            autoRun = !autoRun;
+            let btn = document.getElementById('autoBtn');
+            if (autoRun) {
+                btn.classList.replace('bg-gray-700', 'bg-red-600');
+                btn.classList.replace('hover:bg-gray-600', 'hover:bg-red-500');
+                btn.innerText = "⏸ Dừng Tự Động";
+                autoTimer = 0;
+            } else {
+                btn.classList.replace('bg-red-600', 'bg-gray-700');
+                btn.classList.replace('hover:bg-red-500', 'hover:bg-gray-600');
+                btn.innerText = "▶️ Chạy Tự Động";
+            }
+        }
+
+        function runAutoCycle() {
+            if (!autoRun) return;
+            autoTimer++;
+            if (autoTimer % 180 === 0) { // Đổi trạng thái mỗi ~3 giây
+                let steps = [triggerLightning, triggerFixation, triggerAmmonification, triggerNitrification, triggerAssimilation, triggerDenitrification];
+                let step = floor((autoTimer / 180) % steps.length);
+                steps[step]();
+            }
+        }
+
+        function draw() {
+            drawLandscape();
+            runAutoCycle();
+
+            // Sấm sét
+            if (lightningAlpha > 0) {
+                background(255, 255, 255, lightningAlpha * 0.3);
+                stroke(255, 255, 150, lightningAlpha);
+                strokeWeight(4);
+                noFill();
+                beginShape();
+                for (let pt of lightningPath) vertex(pt.x, pt.y);
+                endShape();
+                lightningAlpha -= 10;
+            }
+
+            // Vẽ và cập nhật hạt
+            for (let p of particles) {
+                p.update();
+                p.draw();
+            }
+            
+            drawLabels();
+        }
+
+        function drawLandscape() {
+            // Bầu trời
+            let skyGrad = drawingContext.createLinearGradient(0, 0, 0, height*0.5);
+            skyGrad.addColorStop(0, '#4facfe');
+            skyGrad.addColorStop(1, '#e0c3fc');
+            drawingContext.fillStyle = skyGrad;
+            noStroke();
+            rect(0, 0, width, height*0.5);
+
+            // Mặt trời
+            fill(255, 223, 0);
+            ellipse(width - 100, 80, 80, 80);
+
+            // Mây (Vẽ bằng các hình ellipse)
+            fill(255, 255, 255, 200);
+            ellipse(150, 100, 80, 50);
+            ellipse(200, 110, 100, 60);
+            ellipse(120, 120, 70, 40);
+            
+            ellipse(width/2, 80, 120, 60);
+            ellipse(width/2 - 40, 90, 80, 50);
+            ellipse(width/2 + 50, 90, 90, 50);
+
+            // Đất nền
+            let soilGrad = drawingContext.createLinearGradient(0, height*0.5, 0, height);
+            soilGrad.addColorStop(0, '#8B5A2B'); // Nâu nhạt mặt đất
+            soilGrad.addColorStop(0.5, '#6b4226');
+            soilGrad.addColorStop(1, '#3d2314'); // Nâu đậm dưới sâu
+            drawingContext.fillStyle = soilGrad;
+            rect(0, height*0.5, width, height*0.5);
+            
+            // Đường viền cỏ xanh mặt đất
+            fill('#4caf50');
+            rect(0, height*0.5, width, 15);
+
+            // Cây họ đậu (Bên trái)
+            push();
+            translate(width * 0.2, height * 0.5);
+            // Rễ chính và rễ phụ
+            stroke('#5c4033');
+            strokeWeight(4);
+            line(0, 0, 0, 120);
+            strokeWeight(2);
+            line(0, 30, -40, 90);
+            line(0, 50, 45, 100);
+            line(-20, 60, -30, 130);
+            line(20, 75, 50, 140);
+            
+            // Vẽ các nốt sần (Vi khuẩn cố định đạm)
+            noStroke();
+            fill('#f39c12');
+            ellipse(-10, 50, 12);
+            ellipse(15, 70, 14);
+            ellipse(-25, 90, 10);
+            ellipse(30, 110, 12);
+            ellipse(-5, 100, 15);
+
+            // Thân cây
+            stroke('#4a3219');
+            strokeWeight(12);
+            line(0, 0, 0, -120);
+            
+            // Tán lá
+            noStroke();
+            fill('#2e7d32');
+            ellipse(0, -140, 160, 140);
+            fill('#388e3c');
+            ellipse(-40, -120, 100, 100);
+            ellipse(40, -120, 100, 100);
+            ellipse(0, -170, 120, 100);
+            pop();
+
+            // Động vật (Con bò đơn giản bên phải)
+            push();
+            let cowX = width * 0.75;
+            let cowY = height * 0.5 - 40;
+            
+            // Chân bò
+            stroke(50);
+            strokeWeight(6);
+            line(cowX - 25, cowY, cowX - 25, cowY + 40);
+            line(cowX - 10, cowY, cowX - 10, cowY + 40);
+            line(cowX + 15, cowY, cowX + 15, cowY + 40);
+            line(cowX + 30, cowY, cowX + 30, cowY + 40);
+
+            // Thân bò
+            noStroke();
+            fill('#ffffff'); // Bò sữa
+            rect(cowX - 40, cowY - 30, 80, 50, 15);
+            fill(20); // Đốm đen
+            ellipse(cowX - 10, cowY - 15, 25, 20);
+            ellipse(cowX + 20, cowY - 10, 15, 25);
+            ellipse(cowX - 30, cowY + 5, 20, 15);
+
+            // Đầu bò
+            fill('#ffffff');
+            ellipse(cowX - 45, cowY - 30, 40, 35);
+            fill('#ffb6c1'); // Mõm bò
+            ellipse(cowX - 55, cowY - 25, 20, 25);
+            fill(20); // Mắt
+            ellipse(cowX - 45, cowY - 35, 4, 4);
+            // Sừng
+            stroke(150);
+            strokeWeight(3);
+            line(cowX - 35, cowY - 45, cowX - 30, cowY - 55);
+            
+            pop();
+        }
+
+        function drawLabels() {
+            // Hiển thị tên các khu vực vi khuẩn
+            push();
+            fill(255, 200);
+            noStroke();
+            textAlign(CENTER, CENTER);
+            textSize(14);
+            textStyle(BOLD);
+            
+            // Khu vực nốt sần
+            text("Vi khuẩn nốt sần\n(Cố định đạm)", width * 0.2, height * 0.72);
+            
+            // Khu vực vi khuẩn phân giải
+            text("Vi khuẩn / Nấm\n(Phân giải amôn)", width * 0.75, height * 0.58);
+            
+            // Khu vực nitrat hóa
+            text("Vi khuẩn Nitrat hóa", width * 0.5, height * 0.65);
+            
+            // Khu vực kỵ khí (Phản nitrat)
+            text("Vi khuẩn Phản nitrat hóa\n(Môi trường kỵ khí)", width * 0.75, height * 0.85);
+
+            pop();
+        }
+    </script>
+</body>
+</html>
